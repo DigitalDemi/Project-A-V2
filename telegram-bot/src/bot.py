@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 # API endpoints
 AGENT_SERVICE_URL = "http://localhost:8000"
+REQUEST_TIMEOUT_SECONDS = 30
 
 class AgentBot:
     """
@@ -97,7 +98,7 @@ class AgentBot:
             response = requests.post(
                 f"{AGENT_SERVICE_URL}/parse",
                 json={'input': user_input, 'use_llm': False},
-                timeout=10
+                timeout=REQUEST_TIMEOUT_SECONDS
             )
             
             if response.status_code == 200:
@@ -127,6 +128,11 @@ class AgentBot:
                     f"❌ Sorry, I couldn't parse that. Error: {response.text}"
                 )
         
+        except requests.exceptions.Timeout:
+            logger.error("Error parsing: timed out waiting for agent service")
+            await update.message.reply_text(
+                "⏱️ Agent service timed out. Make sure it is running, then try again."
+            )
         except Exception as e:
             logger.error(f"Error parsing: {e}")
             await update.message.reply_text(
@@ -170,6 +176,7 @@ class AgentBot:
     async def _confirm_event(self, update: Update, context: ContextTypes.DEFAULT_TYPE, 
                            parsed_event: Dict[str, Any], user_response: str):
         """Send confirmation to agent service to log event"""
+        should_clear_pending = True
         try:
             response = requests.post(
                 f"{AGENT_SERVICE_URL}/confirm",
@@ -178,7 +185,7 @@ class AgentBot:
                     'user_response': user_response,
                     'original_input': context.user_data.get('original_input', '')
                 },
-                timeout=10
+                timeout=REQUEST_TIMEOUT_SECONDS
             )
             
             if response.status_code == 200:
@@ -194,6 +201,7 @@ class AgentBot:
                     await update.message.reply_text(msg)
                 
                 elif result['status'] == 'corrected':
+                    should_clear_pending = False
                     # Show new suggestion
                     keyboard = [
                         [
@@ -217,6 +225,11 @@ class AgentBot:
                     f"❌ Failed to log event. Error: {response.text}"
                 )
         
+        except requests.exceptions.Timeout:
+            logger.error("Error confirming: timed out waiting for agent service")
+            await update.message.reply_text(
+                "⏱️ Confirm request timed out. Try again in a moment."
+            )
         except Exception as e:
             logger.error(f"Error confirming: {e}")
             await update.message.reply_text(
@@ -224,9 +237,10 @@ class AgentBot:
             )
         
         finally:
-            # Clear pending suggestion
-            context.user_data.pop('pending_suggestion', None)
-            context.user_data.pop('original_input', None)
+            # Keep pending suggestion when we are in corrected loop
+            if should_clear_pending:
+                context.user_data.pop('pending_suggestion', None)
+                context.user_data.pop('original_input', None)
     
     async def _handle_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE, user_input: str):
         """Handle query messages"""
@@ -234,7 +248,7 @@ class AgentBot:
             response = requests.post(
                 f"{AGENT_SERVICE_URL}/query",
                 json={'query': user_input},
-                timeout=10
+                timeout=REQUEST_TIMEOUT_SECONDS
             )
             
             if response.status_code == 200:
@@ -245,6 +259,11 @@ class AgentBot:
                     "❌ Sorry, I couldn't process that query."
                 )
         
+        except requests.exceptions.Timeout:
+            logger.error("Error querying: timed out waiting for agent service")
+            await update.message.reply_text(
+                "⏱️ Query timed out. Try again, or check that the agent service is running."
+            )
         except Exception as e:
             logger.error(f"Error querying: {e}")
             await update.message.reply_text(
@@ -273,6 +292,7 @@ class AgentBot:
     
     async def _confirm_event_from_callback(self, query, context, parsed_event, user_response):
         """Confirm event from callback query"""
+        should_clear_pending = True
         try:
             response = requests.post(
                 f"{AGENT_SERVICE_URL}/confirm",
@@ -281,25 +301,46 @@ class AgentBot:
                     'user_response': user_response,
                     'original_input': context.user_data.get('original_input', '')
                 },
-                timeout=10
+                timeout=REQUEST_TIMEOUT_SECONDS
             )
             
             if response.status_code == 200:
                 result = response.json()
-                msg = result['message']
-                if result.get('motivation'):
-                    msg += f"\n\n🔥 {result['motivation']}"
-                await query.edit_message_text(msg)
+                if result.get('status') == 'corrected':
+                    should_clear_pending = False
+                    context.user_data['pending_suggestion'] = result['details']
+                    keyboard = [
+                        [
+                            InlineKeyboardButton("✓ Yes", callback_data='confirm_yes'),
+                            InlineKeyboardButton("✗ No", callback_data='confirm_no')
+                        ]
+                    ]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    await query.edit_message_text(
+                        f"🔄 Corrected:\n"
+                        f"➤ {result['suggestion']}\n\n"
+                        f"Is this correct now?",
+                        reply_markup=reply_markup
+                    )
+                else:
+                    msg = result['message']
+                    if result.get('motivation'):
+                        msg += f"\n\n🔥 {result['motivation']}"
+                    await query.edit_message_text(msg)
             else:
                 await query.edit_message_text(f"❌ Error: {response.text}")
         
+        except requests.exceptions.Timeout:
+            logger.error("Error in callback: timed out waiting for agent service")
+            await query.edit_message_text("⏱️ Timed out while confirming. Please try again.")
         except Exception as e:
             logger.error(f"Error in callback: {e}")
             await query.edit_message_text("❌ Failed to log event.")
         
         finally:
-            context.user_data.pop('pending_suggestion', None)
-            context.user_data.pop('original_input', None)
+            if should_clear_pending:
+                context.user_data.pop('pending_suggestion', None)
+                context.user_data.pop('original_input', None)
     
     async def ratio_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /ratio command"""
