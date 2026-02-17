@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use std::io::BufRead;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use crate::models::{Session, QueryResult};
 
 #[cfg(test)]
@@ -186,14 +186,14 @@ pub struct RatioAnalyzer {
     log_path: PathBuf,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RatioAnalysis {
     pub categories: Vec<CategoryCount>,
     pub total_events: usize,
     pub theory_to_practice: f64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CategoryCount {
     pub category: String,
     pub count: usize,

@@ -17,7 +17,7 @@ mod projections;
 #[cfg(test)]
 mod tests;
 
-use models::{Event, EventInput, ApiResponse, QueryResult};
+use models::{EventInput, ApiResponse, QueryResult};
 use projections::{SessionProjector, RatioAnalyzer};
 
 /// Event-driven HTTP API

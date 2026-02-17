@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::{append_to_log, read_log};
     use std::io::Write;
     use tempfile::NamedTempFile;
 
