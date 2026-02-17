@@ -3,6 +3,103 @@ use std::io::BufRead;
 use serde::Serialize;
 use crate::models::{Session, QueryResult};
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_session_projector_basic() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "START THEORY pandas").unwrap();
+        writeln!(temp_file, "START GAME valorant").unwrap();
+        writeln!(temp_file, "START PRACTICE rust").unwrap();
+        
+        let projector = SessionProjector::new(&temp_file.path().to_path_buf());
+        let sessions = projector.get_all_sessions();
+        
+        assert_eq!(sessions.len(), 3);
+        assert_eq!(sessions[0].category, "THEORY");
+        assert_eq!(sessions[1].category, "GAME");
+        assert_eq!(sessions[2].category, "PRACTICE");
+    }
+
+    #[test]
+    fn test_session_boundaries() {
+        // Test: session ends when new start occurs
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "START THEORY pandas").unwrap();  // Session 1 start
+        writeln!(temp_file, "START GAME valorant").unwrap();   // Session 1 end, Session 2 start
+        
+        let projector = SessionProjector::new(&temp_file.path().to_path_buf());
+        let sessions = projector.get_all_sessions();
+        
+        assert_eq!(sessions.len(), 2);
+        assert_eq!(sessions[0].end_event_idx, Some(0));  // Ends at index 0
+        assert_eq!(sessions[1].start_event_idx, 1);       // Starts at index 1
+    }
+
+    #[test]
+    fn test_activity_recurrence() {
+        // Test: same activity can have multiple sessions
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "START THEORY pandas").unwrap();
+        writeln!(temp_file, "START GAME valorant").unwrap();
+        writeln!(temp_file, "START THEORY pandas").unwrap();  // Same activity, new session
+        
+        let projector = SessionProjector::new(&temp_file.path().to_path_buf());
+        let sessions = projector.get_all_sessions();
+        
+        assert_eq!(sessions.len(), 3);
+        
+        let theory_sessions: Vec<_> = sessions.iter()
+            .filter(|s| s.category == "THEORY")
+            .collect();
+        assert_eq!(theory_sessions.len(), 2);
+    }
+
+    #[test]
+    fn test_ratio_analyzer() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "START THEORY pandas").unwrap();
+        writeln!(temp_file, "START THEORY rust").unwrap();
+        writeln!(temp_file, "START PRACTICE python").unwrap();
+        writeln!(temp_file, "START GAME valorant").unwrap();
+        
+        let analyzer = RatioAnalyzer::new(&temp_file.path().to_path_buf());
+        let result = analyzer.analyze();
+        
+        assert_eq!(result.result_type, "analysis");
+        
+        // Parse the data
+        let analysis: RatioAnalysis = serde_json::from_value(result.data).unwrap();
+        assert_eq!(analysis.total_events, 4);
+        
+        // Check categories
+        let theory_count = analysis.categories.iter()
+            .find(|c| c.category == "THEORY")
+            .map(|c| c.count)
+            .unwrap_or(0);
+        assert_eq!(theory_count, 2);
+    }
+
+    #[test]
+    fn test_no_stop_events_needed() {
+        // Test: sessions derived without explicit STOP
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "START THEORY pandas").unwrap();
+        writeln!(temp_file, "START PRACTICE rust").unwrap();
+        // No STOP event, but should still work
+        
+        let projector = SessionProjector::new(&temp_file.path().to_path_buf());
+        let sessions = projector.get_all_sessions();
+        
+        assert_eq!(sessions.len(), 2);
+        assert!(sessions[0].end_event_idx.is_some());
+    }
+}
+
 /// Projects sessions from event log
 /// Session = period between START events
 pub struct SessionProjector {

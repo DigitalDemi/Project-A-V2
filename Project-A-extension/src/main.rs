@@ -14,6 +14,9 @@ use chrono::Utc;
 mod models;
 mod projections;
 
+#[cfg(test)]
+mod tests;
+
 use models::{Event, EventInput, ApiResponse, QueryResult};
 use projections::{SessionProjector, RatioAnalyzer};
 
