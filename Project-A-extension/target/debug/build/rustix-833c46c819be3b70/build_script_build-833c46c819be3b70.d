@@ -1,5 +1,0 @@
-/home/demi/.projects/basic-agent/Project-A-extension/target/debug/build/rustix-833c46c819be3b70/build_script_build-833c46c819be3b70.d: /home/demi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.3/build.rs
-
-/home/demi/.projects/basic-agent/Project-A-extension/target/debug/build/rustix-833c46c819be3b70/build_script_build-833c46c819be3b70: /home/demi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.3/build.rs
-
-/home/demi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.3/build.rs:

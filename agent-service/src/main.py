@@ -156,7 +156,7 @@ async def process_query(query_input: QueryInput):
     Returns analytics and insights derived from event log
     """
     try:
-        result = query_engine.answer_query(query_input.query)
+        result = query_engine.answer_query(query_input.query, query_input.timeframe or "week")
         
         # For natural language response, we could use LLM
         # For now, return structured data
@@ -183,6 +183,8 @@ def format_query_response(result: Dict[str, Any]) -> str:
     """Format query result as human-readable text"""
     if result['type'] == 'ratio':
         data = result['answer']
+        if 'error' in data:
+            return f"No ratio data yet ({data['error']})."
         return (
             f"Theory to Practice Ratio ({data['timeframe']}):\n"
             f"Total sessions: {data['total_sessions']}\n"

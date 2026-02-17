@@ -38,11 +38,11 @@ echo ""
 
 # Check master.log
 echo "📁 master.log:"
-if [ -f ../Project-A/log/master.log ]; then
-    LINE_COUNT=$(wc -l < ../Project-A/log/master.log)
+if [ -f Project-A-extension/log/master.log ]; then
+    LINE_COUNT=$(wc -l < Project-A-extension/log/master.log)
     echo "   ✅ Exists ($LINE_COUNT events)"
     echo "   Last 3 events:"
-    tail -3 ../Project-A/log/master.log | sed 's/^/   /'
+    tail -3 Project-A-extension/log/master.log | sed 's/^/   /'
 else
     echo "   ❌ Not found"
 fi

@@ -1,0 +1,16 @@
+.env
+*.db
+*.sqlite
+*.sqlite3
+*.log
+*.pid
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+Project-A-extension/target/
+agent-service/data/
+agent-service/logs/
+telegram-bot/logs/
+tool-output/

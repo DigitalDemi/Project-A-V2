@@ -82,7 +82,8 @@ class AgentBot:
             return
         
         # Check if this is a query
-        if user_input.lower().startswith(('what', 'how', 'show', 'tell')):
+        query_prefixes = ('what', 'how', 'show', 'tell', 'today', 'yesterday', 'ratio', 'summary', 'sessions', 'timeline')
+        if user_input.lower().strip().startswith(query_prefixes):
             await self._handle_query(update, context, user_input)
             return
         

@@ -175,6 +175,9 @@ async fn get_ratios(
 // Helper functions
 
 fn append_to_log(path: &PathBuf, line: &str) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)

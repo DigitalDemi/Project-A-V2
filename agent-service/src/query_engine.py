@@ -2,11 +2,10 @@
 Query Engine - Complex analytics and insights from event log
 Respects invariants: only reads, never writes
 """
+import os
 import sqlite3
-import json
-from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
-from pathlib import Path
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 class QueryEngine:
     """
@@ -14,9 +13,10 @@ class QueryEngine:
     Never modifies master.log, only derives projections
     """
     
-    def __init__(self, db_path: str = "data/context.db", log_path: str = "../Project-A/log/master.log"):
-        self.db_path = db_path
-        self.log_path = log_path
+    def __init__(self, db_path: Optional[str] = None, log_path: Optional[str] = None):
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.db_path = db_path or os.path.join(base_dir, "data", "context.db")
+        self.log_path = log_path or os.path.join(base_dir, "..", "Project-A-extension", "log", "master.log")
         self.init_database()
     
     def init_database(self):
@@ -81,35 +81,86 @@ class QueryEngine:
     
     def derive_sessions(self) -> List[Dict[str, Any]]:
         """
-        Derive sessions from event log
+        Derive sessions from event log with actual timestamps
         Session = period between START events
+        Duration calculated from SQLite timestamps
         """
+        # Get events from master.log
         events = self.read_master_log()
+        
+        # Get timestamps from SQLite
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT timestamp, event_type, category, activity, log_position 
+                FROM events 
+                WHERE event_type = 'start'
+                ORDER BY timestamp
+            ''')
+            db_events = cursor.fetchall()
+            conn.close()
+        except:
+            db_events = []
+        
         sessions = []
         current_session = None
         
         for i, event_line in enumerate(events):
             parts = event_line.split()
             if len(parts) >= 3 and parts[0] == 'START':
-                # End previous session
+                # End previous session with duration calculation
                 if current_session:
                     current_session['end_event_index'] = i - 1
+                    # Calculate duration if we have timestamps
+                    if i < len(db_events) and current_session.get('start_timestamp'):
+                        try:
+                            start_time = datetime.fromisoformat(current_session['start_timestamp'])
+                            end_time = datetime.fromisoformat(db_events[i][0])
+                            duration = (end_time - start_time).total_seconds() / 60
+                            current_session['duration_minutes'] = int(duration)
+                        except:
+                            current_session['duration_minutes'] = None
                     sessions.append(current_session)
                 
                 # Start new session
+                start_timestamp = db_events[i][0] if i < len(db_events) else None
                 current_session = {
                     'category': parts[1],
                     'activity': parts[2],
                     'start_event_index': i,
+                    'start_timestamp': start_timestamp,
                     'raw_line': event_line
                 }
         
-        # Don't forget last session
+        # Don't forget last session (still active)
         if current_session:
             current_session['end_event_index'] = len(events) - 1
+            current_session['is_active'] = True
+            # Calculate duration from start to now
+            if current_session.get('start_timestamp'):
+                try:
+                    start_time = datetime.fromisoformat(current_session['start_timestamp'])
+                    duration = (datetime.now() - start_time).total_seconds() / 60
+                    current_session['duration_minutes'] = int(duration)
+                    current_session['duration_display'] = self._format_duration(int(duration))
+                except:
+                    current_session['duration_minutes'] = None
             sessions.append(current_session)
         
         return sessions
+    
+    def _format_duration(self, minutes: int) -> str:
+        """Format duration in human-readable form"""
+        if minutes < 60:
+            return f"{minutes}m"
+        hours = minutes // 60
+        mins = minutes % 60
+        if hours < 24:
+            return f"{hours}h {mins}m"
+        days = hours // 24
+        hours = hours % 24
+        return f"{days}d {hours}h {mins}m"
     
     def calculate_ratios(self, timeframe: str = 'week') -> Dict[str, Any]:
         """
@@ -147,7 +198,7 @@ class QueryEngine:
             )
         }
     
-    def answer_query(self, query: str) -> Dict[str, Any]:
+    def answer_query(self, query: str, timeframe: str = 'week') -> Dict[str, Any]:
         """
         Answer natural language queries
         Examples:
@@ -161,10 +212,10 @@ class QueryEngine:
         if 'ratio' in query_lower:
             return {
                 'type': 'ratio',
-                'answer': self.calculate_ratios()
+                'answer': self.calculate_ratios(timeframe)
             }
         
-        elif 'yesterday' in query_lower or 'last' in query_lower:
+        elif 'yesterday' in query_lower or 'last' in query_lower or 'timeline' in query_lower or 'sessions' in query_lower:
             sessions = self.derive_sessions()
             return {
                 'type': 'timeline',
@@ -174,7 +225,7 @@ class QueryEngine:
                 }
             }
         
-        elif 'what did i' in query_lower or 'work on' in query_lower:
+        elif 'what did i' in query_lower or 'work on' in query_lower or 'today' in query_lower or 'summary' in query_lower:
             sessions = self.derive_sessions()
             activities = list(set(s['activity'] for s in sessions))
             return {
