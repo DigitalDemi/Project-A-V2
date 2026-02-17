@@ -25,7 +25,8 @@ Telegram Bot → Agent Service → Rust API → master.log (source of truth)
 ### Prerequisites
 
 - Arch Linux (or similar)
-- Python 3.11+
+- Python 3.12 (pinned)
+- uv
 - Rust
 - SQLite
 - Telegram Bot Token (from [@BotFather](https://t.me/BotFather))
@@ -47,6 +48,7 @@ chmod +x download-model.sh
 # Configure environment
 cp .env.example .env
 # Edit .env and add your TELEGRAM_BOT_TOKEN
+# Set OBSIDIAN_VAULT_PATH to your laptop vault path
 
 # Start all services
 chmod +x start.sh
@@ -232,9 +234,9 @@ After 2-4 weeks of usage:
 
 ```bash
 # Python tests
-cd agent-service
-source venv/bin/activate
-pytest
+cd /path/to/basic-agent
+export PATH="$HOME/.local/bin:$PATH"
+uv run --with pytest python -m pytest agent-service/tests tests -q
 
 # Rust tests
 cd Project-A-extension

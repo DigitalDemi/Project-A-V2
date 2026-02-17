@@ -5,5 +5,5 @@ sqlalchemy==2.0.0
 python-telegram-bot==20.8
 requests==2.31.0
 python-dotenv==1.0.0
-numpy==1.24.0
+numpy>=1.26.4
 aiohttp==3.9.0

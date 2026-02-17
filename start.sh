@@ -23,6 +23,8 @@ if [ ! -f ".env" ]; then
     exit 1
 fi
 
+export PATH="$HOME/.local/bin:$PATH"
+
 # Start Rust API
 echo "Starting Rust API (port 8080)..."
 cd Project-A-extension
@@ -34,20 +36,20 @@ sleep 3
 
 # Start Agent Service
 echo "Starting Agent Service (port 8000)..."
-cd agent-service
-source venv/bin/activate
-python src/main.py &
+cd agent-service/src
+uv run python main.py &
 AGENT_PID=$!
+cd ..
 cd ..
 
 sleep 2
 
 # Start Telegram Bot
 echo "Starting Telegram Bot..."
-cd telegram-bot
-source venv/bin/activate
-python src/bot.py &
+cd telegram-bot/src
+uv run python bot.py &
 BOT_PID=$!
+cd ..
 cd ..
 
 echo ""

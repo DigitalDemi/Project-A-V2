@@ -21,7 +21,19 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 echo "${GREEN}Step 1: Installing system dependencies...${NC}"
-sudo pacman -S --needed python python-pip rustup sqlite curl base-devel
+sudo pacman -S --needed python rustup sqlite curl base-devel
+
+# Install uv if missing
+if ! command -v uv &> /dev/null; then
+    echo "Installing uv..."
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+fi
+
+export PATH="$HOME/.local/bin:$PATH"
+
+# Ensure Python 3.12 is available for this project
+echo "Ensuring Python 3.12 is available..."
+uv python install 3.12
 
 # Install Rust
 if ! command -v rustc &> /dev/null; then
@@ -33,26 +45,20 @@ echo ""
 echo "${GREEN}Step 2: Setting up Python virtual environments...${NC}"
 
 # Agent Service
-if [ ! -d "agent-service/venv" ]; then
+if [ ! -d "agent-service/.venv" ]; then
     echo "Creating agent-service virtual environment..."
     cd agent-service
-    python -m venv venv
-    source venv/bin/activate
-    pip install --upgrade pip
-    pip install -r requirements.txt
-    deactivate
+    uv venv --python 3.12
+    uv pip install -r requirements.txt
     cd ..
 fi
 
 # Telegram Bot
-if [ ! -d "telegram-bot/venv" ]; then
+if [ ! -d "telegram-bot/.venv" ]; then
     echo "Creating telegram-bot virtual environment..."
     cd telegram-bot
-    python -m venv venv
-    source venv/bin/activate
-    pip install --upgrade pip
-    pip install -r requirements.txt
-    deactivate
+    uv venv --python 3.12
+    uv pip install -r requirements.txt
     cd ..
 fi
 
@@ -104,8 +110,8 @@ After=network.target
 Type=simple
 User=$USER
 WorkingDirectory=$PWD/agent-service
-Environment=PATH=$PWD/agent-service/venv/bin
-ExecStart=$PWD/agent-service/venv/bin/python src/main.py
+Environment=PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin
+ExecStart=$HOME/.local/bin/uv run --directory $PWD/agent-service python src/main.py
 Restart=always
 RestartSec=10
 
@@ -122,8 +128,8 @@ After=network.target
 Type=simple
 User=$USER
 WorkingDirectory=$PWD/telegram-bot
-Environment=PATH=$PWD/telegram-bot/venv/bin
-ExecStart=$PWD/telegram-bot/venv/bin/python src/bot.py
+Environment=PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin
+ExecStart=$HOME/.local/bin/uv run --directory $PWD/telegram-bot python src/bot.py
 Restart=always
 RestartSec=10
 
@@ -169,5 +175,5 @@ echo "3. Start services: ./start.sh"
 echo ""
 echo "Manual start:"
 echo "  Terminal 1: cd Project-A-extension && cargo run"
-echo "  Terminal 2: cd agent-service && source venv/bin/activate && python src/main.py"
-echo "  Terminal 3: cd telegram-bot && source venv/bin/activate && python src/bot.py"
+echo "  Terminal 2: cd agent-service/src && uv run python main.py"
+echo "  Terminal 3: cd telegram-bot/src && uv run python bot.py"
