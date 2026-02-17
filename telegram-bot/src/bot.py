@@ -189,6 +189,8 @@ class AgentBot:
                     if 'session_info' in result:
                         info = result['session_info']
                         msg += f"\n\n📊 Session info: {info}"
+                    if result.get('motivation'):
+                        msg += f"\n\n🔥 {result['motivation']}"
                     await update.message.reply_text(msg)
                 
                 elif result['status'] == 'corrected':
@@ -284,7 +286,10 @@ class AgentBot:
             
             if response.status_code == 200:
                 result = response.json()
-                await query.edit_message_text(result['message'])
+                msg = result['message']
+                if result.get('motivation'):
+                    msg += f"\n\n🔥 {result['motivation']}"
+                await query.edit_message_text(msg)
             else:
                 await query.edit_message_text(f"❌ Error: {response.text}")
         

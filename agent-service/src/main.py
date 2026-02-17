@@ -10,6 +10,13 @@ from datetime import datetime
 import requests
 import json
 import re
+import threading
+import subprocess
+import sys
+from pathlib import Path
+import os
+
+from dotenv import load_dotenv
 
 from parser import EventParser
 from query_engine import QueryEngine
@@ -22,6 +29,50 @@ query_engine = QueryEngine()
 
 # Rust API endpoint (where master.log lives)
 RUST_API_URL = "http://localhost:8080"
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+load_dotenv(BASE_DIR / ".env")
+OBSIDIAN_SYNC_SCRIPT = BASE_DIR / "obsidian-sync" / "sync.py"
+RUST_API_URL = os.getenv("RUST_API_URL", RUST_API_URL)
+
+
+def _motivation_for_event(parsed_event: Dict[str, Any]) -> Optional[str]:
+    action = (parsed_event.get("action") or "").lower()
+    if action != "done":
+        return None
+
+    activity = (parsed_event.get("activity") or "that").lower()
+    category = (parsed_event.get("category") or "TASK").upper()
+
+    if category == "THEORY":
+        return f"Great consistency. You completed {activity} and strengthened your foundation."
+    if category == "PRACTICE":
+        return f"Nice execution. Finishing {activity} compounds real skill."
+    if category == "TASK":
+        return f"Solid win. {activity.capitalize()} is done — momentum is on your side."
+    return f"Nice work finishing {activity}. Keep stacking these wins."
+
+
+def _trigger_obsidian_sync() -> None:
+    """
+    Best-effort projection refresh.
+    Keeps event logging path authoritative and non-blocking.
+    """
+    if not OBSIDIAN_SYNC_SCRIPT.exists():
+        return
+
+    def _run_sync() -> None:
+        try:
+            subprocess.run(
+                [sys.executable, str(OBSIDIAN_SYNC_SCRIPT)],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except Exception:
+            pass
+
+    threading.Thread(target=_run_sync, daemon=True).start()
 
 class EventInput(BaseModel):
     input: str
@@ -98,6 +149,7 @@ async def confirm_event(confirmation: ConfirmationInput):
                     'timestamp': datetime.now().isoformat()
                 }
                 query_engine.store_context(context_data)
+                _trigger_obsidian_sync()
                 
                 # Get session info from Rust API
                 session_info = rust_response.json()
@@ -106,7 +158,8 @@ async def confirm_event(confirmation: ConfirmationInput):
                     'status': 'logged',
                     'event': event_to_log,
                     'session_info': session_info,
-                    'message': f"✅ Logged: {event_to_log}"
+                    'message': f"✅ Logged: {event_to_log}",
+                    'motivation': _motivation_for_event(confirmation.parsed_event)
                 }
             else:
                 raise HTTPException(

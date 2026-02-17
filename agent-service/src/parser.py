@@ -14,11 +14,11 @@ class EventParser:
     """
     
     # Valid event types from the architecture
-    EVENT_TYPES = ['START', 'DONE', 'TASK', 'THEORY', 'PRACTICE', 'GAME', 'NOTE']
+    EVENT_TYPES = ['START', 'DONE', 'TASK', 'THEORY', 'PRACTICE', 'GAME', 'NOTE', 'GOAL']
     
     # Pattern for fuzzy matching
     ACTION_PATTERNS = {
-        'start': ['start', 'begin', 'starting', 'began', 'commence', 'launch'],
+        'start': ['start', 'begin', 'starting', 'began', 'commence', 'launch', 'add', 'set'],
         'done': ['done', 'finished', 'complete', 'completed', 'end', 'ended', 'stop'],
         'note': ['note', 'noted', 'jot', 'remember', 'thought'],
     }
@@ -28,6 +28,7 @@ class EventParser:
         'practice': ['practice', 'practicing', 'exercise', 'implement', 'coding', 'writing'],
         'task': ['task', 'work', 'project', 'job', 'assignment'],
         'game': ['game', 'gaming', 'play', 'playing', 'valorant', 'minecraft'],
+        'goal': ['goal', 'goals'],
     }
     
     def __init__(self):
@@ -49,6 +50,7 @@ class EventParser:
                       'working', 'work', 'on', 'with', 'for', 'the', 'a', 'an', 'are', 'is',
                       'done', 'finished', 'finish', 'complete', 'completed', 'end', 'ended', 'stop', 'doing',
                       'game', 'gaming', 'play', 'playing', 'task', 'tasks', 'theory', 'practice',
+                      'goal', 'goals', 'short', 'medium', 'long', 'term', 'comeback',
                       'note', 'notes', 'learning', 'learn', 'study', 'studying', 'reading', 'read',
                       'implement', 'implementing', 'exercise', 'exercising', 'project', 'projects',
                       'assignment', 'job', 'session', 'sessions', 'data', 'loaders', 'tricky',
@@ -114,6 +116,45 @@ class EventParser:
 
         return "unknown"
 
+    def _extract_goal_payload(self, input_text: str) -> tuple[str, Optional[str]]:
+        """
+        Extract goal activity and horizon from natural text.
+        Returns (activity_slug, horizon).
+        """
+        lowered = input_text.lower()
+
+        horizon = None
+        horizon_patterns = {
+            "SHORT_TERM": ["short term", "short-term", "short"],
+            "MEDIUM_TERM": ["medium term", "medium-term", "medium"],
+            "LONG_TERM": ["long term", "long-term", "long"],
+            "COME_BACK_TO": ["come back to", "come-back", "comeback"],
+        }
+
+        for value, patterns in horizon_patterns.items():
+            if any(p in lowered for p in patterns):
+                horizon = value
+                break
+
+        # Strip trigger words and horizon hints, keep human goal phrase
+        cleaned = lowered
+        cleaned = re.sub(r"\b(add|set|create|new)\b", " ", cleaned)
+        cleaned = re.sub(r"\b(goal|goals)\b", " ", cleaned)
+        cleaned = re.sub(r"\b(short|medium|long)\b", " ", cleaned)
+        cleaned = re.sub(r"\bterm\b", " ", cleaned)
+        cleaned = re.sub(r"\b(come\s+back\s+to|comeback|come-back)\b", " ", cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+        if not cleaned:
+            cleaned = "new_goal"
+
+        activity_slug = re.sub(r"[^a-z0-9\s_-]", "", cleaned)
+        activity_slug = activity_slug.replace(" ", "_")
+        if not activity_slug:
+            activity_slug = "new_goal"
+
+        return activity_slug.upper(), horizon
+
     def parse_with_rules(self, input_text: str) -> Dict[str, Any]:
         """
         Rule-based parsing as fallback/initial implementation
@@ -130,13 +171,21 @@ class EventParser:
         
         # Determine category
         category = None
+        if 'goal' in input_lower or 'goals' in input_lower:
+            category = 'GOAL'
         for cat, patterns in self.CATEGORY_PATTERNS.items():
+            if category == 'GOAL':
+                break
             if any(p in input_lower for p in patterns):
                 category = cat.upper()
                 break
         
         # Extract activity (improved - finds the main subject)
-        activity = self._extract_activity(input_text, category)
+        if category == 'GOAL':
+            activity, goal_horizon = self._extract_goal_payload(input_text)
+        else:
+            activity = self._extract_activity(input_text, category)
+            goal_horizon = None
         
         # Clean up activity name
         activity = re.sub(r'[^\w\s-]', '', activity).strip()
@@ -148,6 +197,9 @@ class EventParser:
             if match:
                 context = match.group(1)
         
+        if goal_horizon and not context:
+            context = goal_horizon
+
         return {
             'action': action,
             'category': category or 'TASK',  # default
