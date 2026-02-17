@@ -32,7 +32,7 @@ struct AppState {
 async fn main() {
     // Initialize state
     let state = AppState {
-        log_path: PathBuf::from("../Project-A/log/master.log"),
+        log_path: PathBuf::from("log/master.log"),
     };
 
     // Build router
