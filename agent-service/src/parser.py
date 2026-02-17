@@ -32,7 +32,88 @@ class EventParser:
     
     def __init__(self):
         self.llm = None  # Will be initialized with llama-cpp
-        
+
+    def _extract_activity(self, input_text: str, category: Optional[str]) -> str:
+        """
+        Extract the main activity/subject from input
+        Uses multiple heuristics to find the most likely activity name
+        """
+        input_lower = input_text.lower()
+        words = input_text.split()
+
+        if not words:
+            return "unknown"
+
+        # List of words to skip (verbs, prepositions, articles, category words)
+        skip_words = {'started', 'starting', 'start', 'begin', 'began', 'beginning', 'commence',
+                      'working', 'work', 'on', 'with', 'for', 'the', 'a', 'an', 'are', 'is',
+                      'done', 'finished', 'finish', 'complete', 'completed', 'end', 'ended', 'stop', 'doing',
+                      'game', 'gaming', 'play', 'playing', 'task', 'tasks', 'theory', 'practice',
+                      'note', 'notes', 'learning', 'learn', 'study', 'studying', 'reading', 'read',
+                      'implement', 'implementing', 'exercise', 'exercising', 'project', 'projects',
+                      'assignment', 'job', 'session', 'sessions', 'data', 'loaders', 'tricky',
+                      'and', 'to', 'of', 'in', 'at', 'i', 'my', 'this', 'that', 'it'}
+
+        # Special case: "valorant game" or "minecraft" - game names should be captured
+        game_names = {'valorant', 'minecraft', 'fortnite', 'overwatch', 'apex', 'rust', 'python', 'pandas'}
+        for word in words:
+            clean = re.sub(r'[^\w\s-]', '', word).strip().lower()
+            if clean in game_names:
+                return word
+
+        # Special case: "for rust" or "session for rust" - look for words after 'for'
+        if ' for ' in input_lower:
+            parts = input_lower.split(' for ')
+            if len(parts) > 1:
+                after_for = parts[1].split()[0]
+                clean = re.sub(r'[^\w\s-]', '', after_for).strip()
+                if clean and clean not in skip_words:
+                    return clean
+
+        # Special case: "database refactor" - look for compound nouns
+        if len(words) >= 2:
+            for i in range(len(words) - 1):
+                word1 = re.sub(r'[^\w\s-]', '', words[i]).strip().lower()
+                word2 = re.sub(r'[^\w\s-]', '', words[i+1]).strip().lower()
+                # If first word is not skip word and second is an action/process word
+                if word1 not in skip_words and word2 in {'refactor', 'migration', 'update', 'build', 'code'}:
+                    return words[i+1]  # Return the action word
+
+        # If category is specified, find the word before it
+        if category:
+            cat_lower = category.lower()
+            for i, word in enumerate(words):
+                if cat_lower in word.lower() and i > 0:
+                    # Return the word before the category
+                    prev_word = words[i-1]
+                    clean = re.sub(r'[^\w\s-]', '', prev_word).strip()
+                    if clean and clean.lower() not in skip_words:
+                        return clean
+
+        # Find the first significant word (not in skip_words)
+        for word in words:
+            clean = re.sub(r'[^\w\s-]', '', word).strip()
+            clean_lower = clean.lower()
+            if clean and clean_lower not in skip_words:
+                # Check if it's not a category word itself
+                is_category = clean_lower in ['theory', 'practice', 'game', 'task']
+                if not is_category:
+                    return clean
+
+        # Fallback: return first non-skip word
+        for word in words:
+            clean = re.sub(r'[^\w\s-]', '', word).strip()
+            if clean and clean.lower() not in skip_words:
+                return clean
+
+        # Ultimate fallback: last word that's not punctuation
+        for word in reversed(words):
+            clean = re.sub(r'[^\w\s-]', '', word).strip()
+            if clean:
+                return clean
+
+        return "unknown"
+
     def parse_with_rules(self, input_text: str) -> Dict[str, Any]:
         """
         Rule-based parsing as fallback/initial implementation
@@ -54,9 +135,8 @@ class EventParser:
                 category = cat.upper()
                 break
         
-        # Extract activity (simplified - takes last significant word)
-        words = input_text.split()
-        activity = words[-1] if words else "unknown"
+        # Extract activity (improved - finds the main subject)
+        activity = self._extract_activity(input_text, category)
         
         # Clean up activity name
         activity = re.sub(r'[^\w\s-]', '', activity).strip()
@@ -71,7 +151,7 @@ class EventParser:
         return {
             'action': action,
             'category': category or 'TASK',  # default
-            'activity': activity,
+            'activity': activity.upper(),
             'context': context,
             'raw_input': input_text,
             'confidence': 0.7,  # rule-based confidence

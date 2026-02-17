@@ -54,7 +54,7 @@ class TestEventParser(unittest.TestCase):
         result = self.parser.parse("Note: pytorch data loaders are tricky")
         
         self.assertEqual(result['action'], 'note')
-        self.assertEqual(result['formatted_event'], 'NOTE TRICKY')
+        self.assertEqual(result['formatted_event'], 'NOTE PYTORCH')
     
     def test_context_extraction(self):
         """Test extracting context from quotes"""
