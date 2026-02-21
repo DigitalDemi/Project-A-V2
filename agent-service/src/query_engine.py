@@ -232,6 +232,67 @@ class QueryEngine:
             ),
         }
 
+    def calculate_time_spent(
+        self,
+        timeframe: str = "day",
+        category: Optional[str] = None,
+        activity: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Approximate time spent from derived sessions.
+        Uses session start date for timeframe filtering.
+        """
+        sessions = self.derive_sessions()
+        now = datetime.now()
+
+        def in_timeframe(session: Dict[str, Any]) -> bool:
+            ts = session.get("start_timestamp")
+            if not ts:
+                return timeframe in {"all", "week", "month"}
+
+            parsed = self._safe_parse_iso(ts)
+            if not parsed:
+                return False
+
+            if timeframe == "day":
+                return parsed.date() == now.date()
+            if timeframe == "week":
+                return (now - parsed).days < 7
+            if timeframe == "month":
+                return (now - parsed).days < 30
+            return True
+
+        filtered = [s for s in sessions if in_timeframe(s)]
+
+        if category:
+            cat = category.upper()
+            filtered = [s for s in filtered if (s.get("category") or "").upper() == cat]
+
+        if activity:
+            act = activity.strip().lower()
+            filtered = [
+                s for s in filtered if act in str(s.get("activity", "")).lower()
+            ]
+
+        total_minutes = sum(
+            int(s.get("duration_minutes") or 0)
+            for s in filtered
+            if isinstance(s.get("duration_minutes"), int)
+            or (
+                isinstance(s.get("duration_minutes"), str)
+                and str(s.get("duration_minutes")).isdigit()
+            )
+        )
+
+        return {
+            "timeframe": timeframe,
+            "category": category.upper() if category else None,
+            "activity": activity,
+            "total_minutes": total_minutes,
+            "total_display": self._format_duration(total_minutes),
+            "session_count": len(filtered),
+        }
+
     def answer_query(self, query: str, timeframe: str = "week") -> Dict[str, Any]:
         """
         Answer natural language queries
@@ -245,6 +306,36 @@ class QueryEngine:
         # Pattern matching for query types
         if "ratio" in query_lower:
             return {"type": "ratio", "answer": self.calculate_ratios(timeframe)}
+
+        if (
+            "how much time" in query_lower
+            or "time spent" in query_lower
+            or "spent on" in query_lower
+        ):
+            inferred_timeframe = timeframe
+            if "today" in query_lower:
+                inferred_timeframe = "day"
+            elif "week" in query_lower:
+                inferred_timeframe = "week"
+            elif "month" in query_lower:
+                inferred_timeframe = "month"
+
+            category = None
+            for known in ("theory", "practice", "task", "game"):
+                if known in query_lower:
+                    category = known
+                    break
+
+            activity = None
+            if " on " in query_lower and not category:
+                activity = query_lower.split(" on ", 1)[1].strip().rstrip("?")
+
+            return {
+                "type": "time_spent",
+                "answer": self.calculate_time_spent(
+                    inferred_timeframe, category=category, activity=activity
+                ),
+            }
 
         elif (
             "yesterday" in query_lower

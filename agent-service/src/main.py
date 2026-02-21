@@ -285,10 +285,19 @@ def format_query_response(result: Dict[str, Any]) -> str:
             f"You've worked on {result['answer']['total_activities']} different activities:\n"
             + "\n".join([f"- {act}" for act in activities])
         )
+    elif result["type"] == "time_spent":
+        data = result["answer"]
+        label = data.get("category") or data.get("activity") or "all work"
+        return (
+            f"Time spent ({data.get('timeframe', 'day')}) on {label}:\n"
+            f"- Total: {data.get('total_display', '0m')} ({data.get('total_minutes', 0)} minutes)\n"
+            f"- Sessions counted: {data.get('session_count', 0)}"
+        )
     else:
         return result["answer"]
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
