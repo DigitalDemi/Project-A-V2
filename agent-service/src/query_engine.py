@@ -284,6 +284,34 @@ class QueryEngine:
             )
         )
 
+        activity_rollup: Dict[str, Dict[str, int]] = {}
+        for session in filtered:
+            key = str(session.get("activity") or "unknown")
+            if key not in activity_rollup:
+                activity_rollup[key] = {"minutes": 0, "sessions": 0}
+
+            raw_minutes = session.get("duration_minutes")
+            minutes = (
+                int(raw_minutes)
+                if isinstance(raw_minutes, int)
+                or (isinstance(raw_minutes, str) and str(raw_minutes).isdigit())
+                else 0
+            )
+
+            activity_rollup[key]["minutes"] += max(minutes, 0)
+            activity_rollup[key]["sessions"] += 1
+
+        by_activity = [
+            {
+                "activity": activity_name,
+                "minutes": stats["minutes"],
+                "display": self._format_duration(stats["minutes"]),
+                "sessions": stats["sessions"],
+            }
+            for activity_name, stats in activity_rollup.items()
+        ]
+        by_activity.sort(key=lambda x: (x["minutes"], x["sessions"]), reverse=True)
+
         return {
             "timeframe": timeframe,
             "category": category.upper() if category else None,
@@ -291,6 +319,7 @@ class QueryEngine:
             "total_minutes": total_minutes,
             "total_display": self._format_duration(total_minutes),
             "session_count": len(filtered),
+            "by_activity": by_activity,
         }
 
     def answer_query(self, query: str, timeframe: str = "week") -> Dict[str, Any]:

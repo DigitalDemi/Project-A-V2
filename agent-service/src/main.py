@@ -288,10 +288,20 @@ def format_query_response(result: Dict[str, Any]) -> str:
     elif result["type"] == "time_spent":
         data = result["answer"]
         label = data.get("category") or data.get("activity") or "all work"
+        breakdown = data.get("by_activity") or []
+        breakdown_lines = "\n".join(
+            [
+                f"  - {item['activity']}: {item['display']} ({item['sessions']} sessions)"
+                for item in breakdown[:5]
+            ]
+        )
+        if not breakdown_lines:
+            breakdown_lines = "  - No sessions in this filter"
         return (
             f"Time spent ({data.get('timeframe', 'day')}) on {label}:\n"
             f"- Total: {data.get('total_display', '0m')} ({data.get('total_minutes', 0)} minutes)\n"
-            f"- Sessions counted: {data.get('session_count', 0)}"
+            f"- Sessions counted: {data.get('session_count', 0)}\n"
+            f"- Breakdown:\n{breakdown_lines}"
         )
     else:
         return result["answer"]
