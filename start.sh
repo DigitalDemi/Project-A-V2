@@ -8,6 +8,10 @@
 echo "🚀 Starting Event-Driven Agent System..."
 echo ""
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_DIR="$SCRIPT_DIR"
+cd "$SCRIPT_DIR" || exit 1
+
 DAEMON_MODE=0
 if [ "$1" = "--daemon" ]; then
     DAEMON_MODE=1
@@ -34,23 +38,25 @@ fi
 
 export PATH="$HOME/.local/bin:$PATH"
 
+mkdir -p "$LOG_DIR"
+
 if [ "$DAEMON_MODE" -eq 1 ]; then
     echo "Starting Rust API (port 8080) in daemon mode..."
     (
         cd Project-A-extension || exit 1
-        nohup cargo run --release > "/home/demi/.projects/basic-agent/.rust-api.log" 2>&1 &
+        nohup cargo run --release > "$LOG_DIR/.rust-api.log" 2>&1 &
     )
 
     echo "Starting Agent Service (port 8000) in daemon mode..."
     (
         cd agent-service/src || exit 1
-        nohup uv run python main.py > "/home/demi/.projects/basic-agent/.agent-service.log" 2>&1 &
+        nohup uv run python main.py > "$LOG_DIR/.agent-service.log" 2>&1 &
     )
 
     echo "Starting Telegram Bot in daemon mode..."
     (
         cd telegram-bot/src || exit 1
-        nohup uv run python bot.py > "/home/demi/.projects/basic-agent/.bot-aiogram.log" 2>&1 &
+        nohup uv run python bot.py > "$LOG_DIR/.bot-aiogram.log" 2>&1 &
     )
 
     echo ""
